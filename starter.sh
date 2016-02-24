@@ -4,7 +4,7 @@ user="username"
 pass="password"
 host="host dns"
 email="email"
-smpt="smtp"
+smtp="smtp"
 host="host"
 
 trap "rm -f /tmp/dnswatcher.lock" SIGINT SIGTERM

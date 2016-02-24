@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
+	"os"
+	"strconv"
 	"text/template"
 	"time"
 	"utils"
@@ -17,10 +19,12 @@ import (
 
 // Process structure to store Process information
 type Process struct {
-	config     *config.Config
-	auth       smtp.Auth
-	template   *template.Template
-	previousIP net.IP
+	config          *config.Config
+	auth            smtp.Auth
+	template        *template.Template
+	previousIP      net.IP
+	pid             string
+	processHostname string
 }
 
 // NewProcess returns new process instance
@@ -32,6 +36,8 @@ func NewProcess(c config.Interface) utils.ProcessInterface {
 func (p *Process) Init() error {
 	p.auth = smtp.PlainAuth("", p.config.User, p.config.Password, p.config.SMTPHostname)
 	p.template = template.Must(template.New("email").Parse(emailTmpl))
+	p.pid = strconv.Itoa(os.Getpid())
+	p.processHostname = os.Getenv("HOSTNAME")
 	return nil
 }
 
@@ -82,13 +88,15 @@ func (p *Process) checkDNS() error {
 
 func (p *Process) sendEmail(newIP net.IP) error {
 	data := map[string]interface{}{
-		"From":       "DNSWatcher",
-		"Email":      p.config.Email,
-		"User":       p.config.User,
-		"HostName":   p.config.Hostname,
-		"PreviousIP": p.previousIP,
-		"NewIp":      newIP,
-		"Timestamp":  time.Now(),
+		"From":            "DNSWatcher",
+		"Email":           p.config.Email,
+		"User":            p.config.User,
+		"HostName":        p.config.Hostname,
+		"PreviousIP":      p.previousIP,
+		"NewIp":           newIP,
+		"Timestamp":       time.Now(),
+		"Pid":             p.pid,
+		"ProcessHostname": p.processHostname,
 	}
 
 	header := make(map[string]string)
@@ -127,6 +135,8 @@ The Hostname: {{.HostName}} points to a new ip address
 Previous IP: {{.PreviousIP}}
 New IP: {{.NewIp}}
 Timestamp: {{.Timestamp}}
+Process Hostname: {{.ProcessHostname}}
+Pid: {{.Pid}}
 
 Regards
 DNSWatcher

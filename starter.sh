@@ -5,7 +5,6 @@ pass="password"
 host="host dns"
 email="email"
 smtp="smtp"
-host="host"
 
 trap "rm -f /tmp/dnswatcher.lock" SIGINT SIGTERM
 if [ -e /tmp/dnswatcher.lock ]

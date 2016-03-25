@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"config"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -10,8 +9,11 @@ import (
 	"net/smtp"
 	"os"
 	"strconv"
+	"strings"
 	"text/template"
 	"time"
+
+	"config"
 	"utils"
 
 	"github.com/golang/glog"
@@ -22,22 +24,52 @@ type Process struct {
 	config          *config.Config
 	auth            smtp.Auth
 	template        *template.Template
-	previousIP      net.IP
 	pid             string
 	processHostname string
+	address         []*AddressWatcher
+	userInfos       []UserInfo
+}
+
+// AddressWatcher store information about an address
+type AddressWatcher struct {
+	Address    string
+	PreviousIP net.IP
+}
+
+// UserInfo use to store user information
+type UserInfo struct {
+	Email string
+	Name  string
+}
+
+// NewAddressWatcher returns new AddressWatcher instance
+func NewAddressWatcher(address string) *AddressWatcher {
+	return &AddressWatcher{Address: address}
 }
 
 // NewProcess returns new process instance
 func NewProcess(c config.Interface) utils.ProcessInterface {
-	return &Process{config: c.(*config.Config)}
+	return &Process{config: c.(*config.Config), address: []*AddressWatcher{}}
 }
 
 // Init the process resources
 func (p *Process) Init() error {
+	glog.Info("Init Start")
 	p.auth = smtp.PlainAuth("", p.config.User, p.config.Password, p.config.SMTPHostname)
 	p.template = template.Must(template.New("email").Parse(emailTmpl))
 	p.pid = strconv.Itoa(os.Getpid())
-	p.processHostname = os.Getenv("HOSTNAME")
+	p.processHostname, _ = os.Hostname()
+
+	for _, addr := range strings.Split(p.config.Hostname, ",") {
+		glog.Info("- Add addr:" + addr)
+		p.address = append(p.address, NewAddressWatcher(addr))
+	}
+
+	for _, email := range strings.Split(p.config.Email, ",") {
+		glog.Info("- Add email:" + email)
+		p.userInfos = append(p.userInfos, UserInfo{Email: email, Name: email})
+	}
+	glog.Info("Init Stop")
 	return nil
 }
 
@@ -66,8 +98,8 @@ func (p *Process) Start(stop chan utils.Stop) error {
 	}
 }
 
-func (p *Process) checkDNS() error {
-	ips, err := net.LookupIP(p.config.Hostname)
+func (p *Process) checkDNSAddress(addr *AddressWatcher) error {
+	ips, err := net.LookupIP(addr.Address)
 	if err != nil {
 		return err
 	}
@@ -76,23 +108,42 @@ func (p *Process) checkDNS() error {
 		return errors.New("IPs contains no or too-many ip")
 	}
 
-	if !ips[0].Equal(p.previousIP) {
-		if err := p.sendEmail(ips[0]); err != nil {
+	if !ips[0].Equal(addr.PreviousIP) {
+		if err := p.sendEmails(addr, ips[0]); err != nil {
 			return err
 		}
-		p.previousIP = ips[0]
+		addr.PreviousIP = ips[0]
 	}
 
 	return nil
 }
 
-func (p *Process) sendEmail(newIP net.IP) error {
+func (p *Process) checkDNS() error {
+
+	for _, addr := range p.address {
+		p.checkDNSAddress(addr)
+	}
+
+	return nil
+}
+
+func (p *Process) sendEmails(addr *AddressWatcher, newIP net.IP) error {
+	for _, user := range p.userInfos {
+		if err := p.sendEmail(addr, user, newIP); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (p *Process) sendEmail(addr *AddressWatcher, user UserInfo, newIP net.IP) error {
 	data := map[string]interface{}{
 		"From":            "DNSWatcher",
-		"Email":           p.config.Email,
-		"User":            p.config.User,
-		"HostName":        p.config.Hostname,
-		"PreviousIP":      p.previousIP,
+		"Email":           user.Email,
+		"User":            user.Name,
+		"HostName":        addr.Address,
+		"PreviousIP":      addr.PreviousIP,
 		"NewIp":           newIP,
 		"Timestamp":       time.Now(),
 		"Pid":             p.pid,
@@ -101,8 +152,8 @@ func (p *Process) sendEmail(newIP net.IP) error {
 
 	header := make(map[string]string)
 	header["From"] = "DNSWatcher"
-	header["To"] = p.config.Email
-	header["Subject"] = string("DNSWatcher " + p.config.Hostname + " has changed")
+	header["To"] = user.Email
+	header["Subject"] = string("DNSWatcher " + addr.Address + " has changed")
 	header["MIME-Version"] = "1.0"
 	header["Content-Type"] = "text/plain; charset=\"utf-8\""
 	header["Content-Transfer-Encoding"] = "base64"
@@ -120,7 +171,7 @@ func (p *Process) sendEmail(newIP net.IP) error {
 	message += "\r\n" + base64.StdEncoding.EncodeToString(buf.Bytes())
 	glog.Info("Email:", message)
 
-	err := smtp.SendMail(p.config.SMTPHostname+":587", p.auth, "DNSWatcher", []string{p.config.Email}, []byte(message))
+	err := smtp.SendMail(p.config.SMTPHostname+":587", p.auth, "DNSWatcher", []string{user.Email}, []byte(message))
 	if err != nil {
 		return err
 	}

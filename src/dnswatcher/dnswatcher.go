@@ -33,7 +33,7 @@ type Process struct {
 // AddressWatcher store information about an address
 type AddressWatcher struct {
 	Address    string
-	PreviousIP net.IP
+	PreviousIP *utils.TimerSet
 }
 
 // UserInfo use to store user information
@@ -44,7 +44,7 @@ type UserInfo struct {
 
 // NewAddressWatcher returns new AddressWatcher instance
 func NewAddressWatcher(address string) *AddressWatcher {
-	return &AddressWatcher{Address: address}
+	return &AddressWatcher{Address: address, PreviousIP: utils.NewTimerSet(time.Duration(5 * time.Minute))}
 }
 
 // NewProcess returns new process instance
@@ -108,13 +108,12 @@ func (p *Process) checkDNSAddress(addr *AddressWatcher) error {
 		return errors.New("IPs contains no or too-many ip")
 	}
 
-	if !ips[0].Equal(addr.PreviousIP) {
+	if !addr.PreviousIP.FindIP(ips[0]) {
 		if err := p.sendEmails(addr, ips[0]); err != nil {
 			return err
 		}
-		addr.PreviousIP = ips[0]
 	}
-
+	addr.PreviousIP.AddIP(ips[0], time.Now())
 	return nil
 }
 

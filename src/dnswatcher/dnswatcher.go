@@ -32,8 +32,9 @@ type Process struct {
 
 // AddressWatcher store information about an address
 type AddressWatcher struct {
-	Address    string
-	PreviousIP *utils.TimerSet
+	Address      string
+	PreviousIP   *utils.TimerSet
+	PreviousTime time.Time
 }
 
 // UserInfo use to store user information
@@ -44,7 +45,11 @@ type UserInfo struct {
 
 // NewAddressWatcher returns new AddressWatcher instance
 func NewAddressWatcher(address string) *AddressWatcher {
-	return &AddressWatcher{Address: address, PreviousIP: utils.NewTimerSet(time.Duration(5 * time.Minute))}
+	return &AddressWatcher{
+		Address:      address,
+		PreviousIP:   utils.NewTimerSet(time.Duration(5 * time.Minute)),
+		PreviousTime: time.Now(),
+	}
 }
 
 // NewProcess returns new process instance
@@ -112,6 +117,7 @@ func (p *Process) checkDNSAddress(addr *AddressWatcher) error {
 		if err := p.sendEmails(addr, ips[0]); err != nil {
 			return err
 		}
+		addr.PreviousTime = time.Now()
 	}
 	addr.PreviousIP.AddIP(ips[0], time.Now())
 	return nil
@@ -142,7 +148,8 @@ func (p *Process) sendEmail(addr *AddressWatcher, user UserInfo, newIP net.IP) e
 		"Email":           user.Email,
 		"User":            user.Name,
 		"HostName":        addr.Address,
-		"PreviousIP":      addr.PreviousIP,
+		"Duration":        time.Since(addr.PreviousTime),
+		"PreviousIP":      addr.PreviousIP.Front().String(),
 		"NewIp":           newIP,
 		"Timestamp":       time.Now(),
 		"Pid":             p.pid,
@@ -182,7 +189,7 @@ Hi {{.User}}!
 
 The Hostname: {{.HostName}} points to a new ip address
 
-Previous IP: {{.PreviousIP}}
+Previous IP: {{.PreviousIP}} since {{.Duration}}
 New IP: {{.NewIp}}
 Timestamp: {{.Timestamp}}
 Process Hostname: {{.ProcessHostname}}

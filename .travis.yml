@@ -1,0 +1,15 @@
+language: go
+sudo: false
+go:
+  - 1.6.2
+  - tip
+env:
+  global:
+    - GOARCH=amd64
+    - GO15VENDOREXPERIMENT=1
+install: 
+  - go get github.com/constabulary/gb/...
+script:
+  - gb vendor restore
+  - gb build
+  - gb test

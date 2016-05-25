@@ -46,6 +46,17 @@ func (t *TimerSet) FindIP(ip net.IP) bool {
 	return false
 }
 
+// Front return last IP
+func (t TimerSet) Front() net.IP {
+	var output net.IP
+
+	if len(t.ips) > 0 {
+		output = t.ips[len(t.ips)-1].IP
+	}
+
+	return output
+}
+
 func (t TimerSet) String() string {
 	output := "["
 

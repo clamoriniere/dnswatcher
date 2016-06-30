@@ -16,6 +16,7 @@ import (
 	"config"
 	"utils"
 
+	units "github.com/docker/go-units"
 	"github.com/golang/glog"
 )
 
@@ -148,7 +149,7 @@ func (p *Process) sendEmail(addr *AddressWatcher, user UserInfo, newIP net.IP) e
 		"Email":           user.Email,
 		"User":            user.Name,
 		"HostName":        addr.Address,
-		"Duration":        time.Since(addr.PreviousTime),
+		"Duration":        units.HumanDuration(time.Since(addr.PreviousTime)),
 		"PreviousIP":      addr.PreviousIP.Front().String(),
 		"NewIp":           newIP,
 		"Timestamp":       time.Now(),

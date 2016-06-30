@@ -1,5 +1,7 @@
 bin/
 pkg/
+/vendor/src
+/src/dnswatcher/dnswatcher
 [Tt]humbs.db
 *.DS_Store
 
